@@ -34,7 +34,7 @@ describe('ScrollSpy', () => {
       '    <li class="nav-item"><a id="li-jsm-1" class="nav-link" href="#div-jsm-1">div 1</a></li>',
       '  </ul>',
       '</nav>',
-      '<div class="content" data-bs-target="#navBar">',
+      '<div class="content" data-bs-target="#navBar" style="overflow-y: auto">',
       '  <div id="div-jsm-1">div 1</div>',
       '</div>'
     ].join('')
@@ -203,44 +203,6 @@ describe('ScrollSpy', () => {
       })
     })
 
-    it('should correctly select middle navigation option when large offset is used', () => {
-      return new Promise(resolve => {
-        fixtureEl.innerHTML = [
-          '<div id="header" style="height: 500px;"></div>',
-          '<nav id="navigation" class="navbar">',
-          '  <ul class="navbar-nav">',
-          '    <li class="nav-item"><a class="nav-link active" id="one-link" href="#one">One</a></li>',
-          '    <li class="nav-item"><a class="nav-link" id="two-link" href="#two">Two</a></li>',
-          '    <li class="nav-item"><a class="nav-link" id="three-link" href="#three">Three</a></li>',
-          '  </ul>',
-          '</nav>',
-          '<div id="content" style="height: 200px; overflow-y: auto;">',
-          '  <div id="one" style="height: 500px;"></div>',
-          '  <div id="two" style="height: 300px;"></div>',
-          '  <div id="three" style="height: 10px;"></div>',
-          '</div>'
-        ].join('')
-
-        const contentEl = fixtureEl.querySelector('#content')
-        const scrollSpy = new ScrollSpy(fixtureEl, {
-          target: '#navigation',
-          offset: contentEl.offsetTop
-        })
-
-        spyOn(scrollSpy, '_process').and.callThrough()
-
-        onScrollStop(() => {
-          expect(fixtureEl.querySelector('#one-link')).not.toHaveClass('active')
-          expect(fixtureEl.querySelector('#two-link')).toHaveClass('active')
-          expect(fixtureEl.querySelector('#three-link')).not.toHaveClass('active')
-          expect(scrollSpy._process).toHaveBeenCalled()
-          resolve()
-        }, contentEl)
-
-        scrollTo(contentEl, 550)
-      })
-    })
-
     it('should add the active class to the correct element', () => {
       return new Promise(resolve => {
         fixtureEl.innerHTML = [
@@ -355,6 +317,50 @@ describe('ScrollSpy', () => {
             })
           }
         })
+      })
+    })
+
+    it('should clear selection if above the first section', () => {
+      return new Promise(resolve => {
+        fixtureEl.innerHTML = [
+          '<div id="header" style="height: 500px;"></div>',
+          '<nav id="navigation" class="navbar">',
+          '  <ul class="navbar-nav">',
+          '    <li class="nav-item"><a id="one-link"   class="nav-link active" href="#one">One</a></li>',
+          '    <li class="nav-item"><a id="two-link"   class="nav-link" href="#two">Two</a></li>',
+          '    <li class="nav-item"><a id="three-link" class="nav-link" href="#three">Three</a></li>',
+          '  </ul>',
+          '</nav>',
+          '<div id="content" style="height: 200px; overflow-y: auto;">',
+          '  <div id="spacer" style="height: 200px;"></div>',
+          '  <div id="one" style="height: 100px;">text</div>',
+          '  <div id="two" style="height: 100px;">text</div>',
+          '  <div id="three" style="height: 100px;">text</div>',
+          '  <div id="spacer" style="height: 100px;"></div>',
+          '</div>'
+        ].join('')
+
+        const contentEl = fixtureEl.querySelector('#content')
+        const scrollSpy = new ScrollSpy(contentEl, {
+          target: '#navigation',
+          offset: contentEl.offsetTop
+        })
+        const spy = spyOn(scrollSpy, '_process').and.callThrough()
+
+        onScrollStop(() => {
+          const active = () => fixtureEl.querySelector('.active')
+          expect(spy).toHaveBeenCalled()
+
+          expect(fixtureEl.querySelectorAll('.active')).toHaveSize(1)
+          expect(active().getAttribute('id')).toEqual('two-link')
+          onScrollStop(() => {
+            expect(active()).toBeNull()
+            resolve()
+          }, contentEl)
+          scrollTo(contentEl, 0)
+        }, contentEl, 100)
+
+        scrollTo(contentEl, 200)
       })
     })
 
@@ -680,7 +686,7 @@ describe('ScrollSpy', () => {
     it('should create scrollspy on window load event', () => {
       fixtureEl.innerHTML = [
         '<div id="nav"></div>' +
-        '<div id="wrapper" data-bs-spy="scroll" data-bs-target="#nav"></div>'
+        '<div id="wrapper" data-bs-spy="scroll" data-bs-target="#nav" style="overflow-y: auto"></div>'
       ].join('')
 
       const scrollSpyEl = fixtureEl.querySelector('#wrapper')
@@ -731,7 +737,9 @@ describe('ScrollSpy', () => {
       const div = fixtureEl.querySelector('.content')
       const link = fixtureEl.querySelector('[href="#div-jsm-1"]')
       const observable = fixtureEl.querySelector('#div-jsm-1')
-      const clickSpy = spyOnProperty(div, 'scrollTop', 'set').and.callThrough()
+      const clickSpy = div.scrollTo ?
+        spyOn(div, 'scrollTo').and.callThrough() :
+        spyOnProperty(div, 'scrollTop', 'set').and.callThrough()
       // eslint-disable-next-line no-new
       new ScrollSpy(div, {
         offset: 1,
@@ -739,7 +747,12 @@ describe('ScrollSpy', () => {
       })
 
       setTimeout(() => {
-        expect(clickSpy).toHaveBeenCalledWith(observable.offsetTop - div.offsetTop)
+        if (div.scrollTo) {
+          expect(clickSpy).toHaveBeenCalledWith({ top: observable.offsetTop - div.offsetTop })
+        } else {
+          expect(clickSpy).toHaveBeenCalledWith(observable.offsetTop - div.offsetTop)
+        }
+
         done()
       }, 100)
       link.click()
